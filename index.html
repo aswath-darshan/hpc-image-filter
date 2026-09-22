@@ -451,6 +451,80 @@
   .speedup-val.fast  { color: var(--ok); }
   .speedup-val.slow  { color: var(--gpu); }
 
+  /* ---- Live speedup / efficiency cards ---- */
+  .result-line {
+    margin-top: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+  }
+
+  .result-line b { color: var(--ink); font-weight: 600; }
+
+  .live-metrics {
+    display: flex;
+    gap: 14px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    animation: fadeIn 0.4s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .live-card {
+    border: 1px solid var(--line);
+    padding: 12px 16px;
+    min-width: 200px;
+    flex: 1;
+  }
+
+  .live-card-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-60);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .live-card-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .live-card-value.fast  { color: var(--ok); }
+  .live-card-value.slow  { color: var(--gpu); }
+  .live-card-value.eff-high-v { color: #065f46; }
+  .live-card-value.eff-mid-v  { color: #92400e; }
+  .live-card-value.eff-low-v  { color: #991b1b; }
+
+  .live-card-note {
+    font-size: 12px;
+    color: var(--ink-60);
+    line-height: 1.5;
+    align-self: center;
+    border: none;
+    padding-left: 0;
+    min-width: 160px;
+  }
+
+  .baseline-hint {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--ink-60);
+    font-family: 'Inter', sans-serif;
+    padding: 10px 14px;
+    border: 1px dashed var(--line);
+    background: var(--bg-subtle);
+  }
+
   footer {
     margin-top: 40px;
     font-size: 12px;
@@ -532,10 +606,31 @@
       </div>
     </div>
 
-    <div class="result-line" id="resultLine" style="display:none">
-      <span>method: <b id="resMethod">—</b></span>
-      <span>server time: <b id="resTime">—</b></span>
-      <span>throughput: <b id="resThroughput">—</b></span>
+    <div id="resultLine" style="display:none">
+      <!-- Basic metrics row -->
+      <div class="result-line">
+        <span>method: <b id="resMethod">—</b></span>
+        <span>server time: <b id="resTime">—</b></span>
+        <span>throughput: <b id="resThroughput">—</b></span>
+      </div>
+
+      <!-- Live speedup / efficiency cards -->
+      <div class="live-metrics" id="liveMetrics" style="display:none">
+        <div class="live-card">
+          <div class="live-card-label">Speedup  S = T<sub>serial</sub> / T<sub>this</sub></div>
+          <div class="live-card-value" id="liveSpeedup">—</div>
+        </div>
+        <div class="live-card">
+          <div class="live-card-label">Efficiency  E = S / P × 100%  (P = 4 threads)</div>
+          <div class="live-card-value" id="liveEfficiency">—</div>
+        </div>
+        <div class="live-card live-card-note" id="liveNote"></div>
+      </div>
+
+      <!-- Hint shown before a serial baseline exists -->
+      <div class="baseline-hint" id="baselineHint" style="display:none">
+        💡 Run <b>Serial</b> first to set the baseline, then switch to <b>OpenMP</b> to see live Speedup &amp; Efficiency.
+      </div>
     </div>
     <div class="error" id="errorLine" style="display:none"></div>
   </div>
@@ -802,7 +897,8 @@
   const resultLine  = document.getElementById('resultLine');
   const errorLine   = document.getElementById('errorLine');
 
-  let selectedFile = null;
+  let selectedFile   = null;
+  let serialBaseline = null; // stores the last serial run time (seconds) for live speedup calc
 
   imageInput.addEventListener('change', (e) => {
     selectedFile = e.target.files[0];
@@ -820,8 +916,8 @@
 
     runBtn.disabled = true;
     statusDot.classList.add('busy');
-    statusText.textContent = 'processing on VM…';
-    resultLine.style.display = 'none';
+    statusText.textContent = 'processing on VM\u2026';
+    document.getElementById('resultLine').style.display = 'none';
     errorLine.style.display = 'none';
 
     const formData = new FormData();
@@ -836,22 +932,71 @@
         throw new Error(errJson.error || `Server returned ${response.status}`);
       }
 
-      const serverTime = response.headers.get('X-Processing-Time-Seconds');
-      const method = response.headers.get('X-Method') ||
-                     document.getElementById('methodSelect').value;
+      const serverTime = parseFloat(response.headers.get('X-Processing-Time-Seconds'));
+      const method     = response.headers.get('X-Method') ||
+                         document.getElementById('methodSelect').value;
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const url  = URL.createObjectURL(blob);
 
       document.getElementById('outputSlot').outerHTML =
         `<img id="outputSlot" src="${url}" alt="filtered output">`;
 
-      document.getElementById('resMethod').textContent = method;
-      document.getElementById('resTime').textContent =
-        `${parseFloat(serverTime).toFixed(6)} s`;
-      document.getElementById('resThroughput').textContent =
-        `${(1 / parseFloat(serverTime)).toFixed(2)} img/s`;
-      resultLine.style.display = 'flex';
+      // Basic metrics
+      document.getElementById('resMethod').textContent     = method;
+      document.getElementById('resTime').textContent       = `${serverTime.toFixed(6)} s`;
+      document.getElementById('resThroughput').textContent = `${(1 / serverTime).toFixed(2)} img/s`;
+      document.getElementById('resultLine').style.display  = 'block';
       statusText.textContent = 'done';
+
+      // ---- Live Speedup & Efficiency ----
+      const THREADS = 4; // openmp thread count used by the server
+
+      if (method === 'serial') {
+        // Store this run as the new baseline
+        serialBaseline = serverTime;
+
+        // Show hint to switch to OpenMP next
+        document.getElementById('liveMetrics').style.display  = 'none';
+        document.getElementById('baselineHint').style.display = 'block';
+
+      } else if (method === 'openmp') {
+        document.getElementById('baselineHint').style.display = 'none';
+
+        if (serialBaseline !== null) {
+          const speedup = serialBaseline / serverTime;
+          const effPct  = (speedup / THREADS) * 100;
+
+          // Speedup card
+          const sEl  = document.getElementById('liveSpeedup');
+          sEl.textContent = `${speedup.toFixed(2)}\u00d7`;
+          sEl.className   = 'live-card-value ' + (speedup >= 1 ? 'fast' : 'slow');
+
+          // Efficiency card
+          const eEl  = document.getElementById('liveEfficiency');
+          eEl.textContent = `${effPct.toFixed(1)}%`;
+          eEl.className   = 'live-card-value ' +
+            (effPct >= 60 ? 'eff-high-v' : effPct >= 25 ? 'eff-mid-v' : 'eff-low-v');
+
+          // Interpretation note
+          let note = '';
+          if (speedup < 1) {
+            note = `\u26a0\ufe0f OpenMP is <b>slower than serial</b> on this cloud VM — oversubscription: ${THREADS} threads requested but fewer real cores available.`;
+          } else if (effPct >= 75) {
+            note = `\u2705 Near-linear scaling — ${THREADS} threads are efficiently using the CPU.`;
+          } else if (effPct >= 40) {
+            note = `\u26a0\ufe0f Moderate efficiency — some thread overhead or limited cores on this cloud VM.`;
+          } else {
+            note = `\u26a0\ufe0f Low efficiency — thread management overhead is significant relative to compute time.`;
+          }
+          document.getElementById('liveNote').innerHTML = note;
+
+          document.getElementById('liveMetrics').style.display = 'flex';
+        } else {
+          // No baseline yet — show hint
+          document.getElementById('liveMetrics').style.display  = 'none';
+          document.getElementById('baselineHint').style.display = 'block';
+        }
+      }
 
     } catch (err) {
       errorLine.textContent = `Request failed: ${err.message}`;
