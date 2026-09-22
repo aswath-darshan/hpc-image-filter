@@ -358,6 +358,99 @@
     line-height: 1.6;
   }
 
+  /* ---- Speedup / Efficiency table ---- */
+  .formula-row {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    align-items: flex-start;
+  }
+
+  .formula-box {
+    border: 1px solid var(--line);
+    padding: 12px 18px;
+    background: var(--bg-subtle);
+    flex: 1;
+    min-width: 220px;
+  }
+
+  .formula-box .formula-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-60);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+
+  .formula-box .formula-expr {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .formula-box .formula-desc {
+    font-size: 12px;
+    color: var(--ink-60);
+    line-height: 1.4;
+  }
+
+  .metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 8px;
+  }
+
+  .metrics-table th {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 2px solid var(--ink);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-60);
+    white-space: nowrap;
+  }
+
+  .metrics-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  .metrics-table tr:last-child td { border-bottom: none; }
+
+  .metrics-table .section-head td {
+    background: var(--bg-subtle);
+    font-weight: 600;
+    color: var(--ink-60);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 5px 10px;
+  }
+
+  .badge-eff {
+    display: inline-block;
+    padding: 1px 7px;
+    font-size: 11px;
+    border-radius: 2px;
+    font-weight: 600;
+  }
+
+  .eff-high  { background: #d1fae5; color: #065f46; }
+  .eff-mid   { background: #fef3c7; color: #92400e; }
+  .eff-low   { background: #fee2e2; color: #991b1b; }
+
+  .speedup-val { font-weight: 600; }
+  .speedup-val.fast  { color: var(--ok); }
+  .speedup-val.slow  { color: var(--gpu); }
+
   footer {
     margin-top: 40px;
     font-size: 12px;
@@ -479,6 +572,51 @@
     </div>
   </div>
 
+  <!-- Speedup & Efficiency Analysis -->
+  <div class="panel">
+    <p class="panel-label">speedup &amp; efficiency analysis</p>
+
+    <!-- Formulas -->
+    <div class="formula-row">
+      <div class="formula-box">
+        <div class="formula-title">Speedup (S)</div>
+        <div class="formula-expr">S = T<sub>serial</sub> / T<sub>parallel</sub></div>
+        <div class="formula-desc">How many times faster is the parallel version compared to the single-core baseline? S &gt; 1 = faster, S &lt; 1 = slower.</div>
+      </div>
+      <div class="formula-box">
+        <div class="formula-title">Efficiency (E) — CPU</div>
+        <div class="formula-expr">E = S / P &times; 100%</div>
+        <div class="formula-desc">Where P = number of threads. E = 100% means perfect linear scaling. Lower E means overhead (scheduling, memory contention) is wasting cores.</div>
+      </div>
+      <div class="formula-box">
+        <div class="formula-title">Efficiency (E) — GPU</div>
+        <div class="formula-expr">E = S / SM<sub>count</sub> &times; 100%</div>
+        <div class="formula-desc">For GPU, P = number of Streaming Multiprocessors (SMs) — the GPU's independent scheduling units. Low % per SM is expected and normal for a GPU.</div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <table class="metrics-table" id="metricsTable">
+      <thead>
+        <tr>
+          <th>Platform</th>
+          <th>Image</th>
+          <th>Method</th>
+          <th>P (cores/SMs)</th>
+          <th>Time (s)</th>
+          <th>Speedup (S)</th>
+          <th>Efficiency (E)</th>
+        </tr>
+      </thead>
+      <tbody id="metricsBody"></tbody>
+    </table>
+
+    <p style="font-size:11px;color:var(--ink-30);margin-top:12px;font-family:'JetBrains Mono',monospace">
+      * GPU efficiency uses SM count as P (Tesla T4 = 40 SMs, RTX 3050 = 20 SMs).
+      Low % per SM is structurally expected — GPUs trade per-unit efficiency for massive parallelism.
+    </p>
+  </div>
+
   <!-- Key Findings -->
   <div class="panel">
     <p class="panel-label">key findings</p>
@@ -598,7 +736,65 @@
   renderChart('chartCloudSmall', cloudBenchmarks.small);
   renderChart('chartCloudLarge', cloudBenchmarks.large);
 
-  // ---- Live demo wiring ----
+  // ---- Speedup & Efficiency table ----
+  // All times in seconds. For local rows, derived from throughput (t = 1/tp).
+  // For cloud rows, exact measured times from cloud_gpu_results.txt.
+  // P = thread count for CPU; SM count for GPU (T4=40, RTX3050=20).
+  const metricsData = [
+    // ── Local machine ──────────────────────────────────────────
+    { section: 'Local Machine (Laptop — Intel i5 / RTX 3050)', isHead: true },
+    // 512×512
+    { platform:'Local', image:'512×512',   method:'Serial (baseline)', P:1,  time:1/275.5,   serial:1/275.5,   isGPU:false },
+    { platform:'Local', image:'512×512',   method:'OpenMP 4 threads',  P:4,  time:1/528.9,   serial:1/275.5,   isGPU:false },
+    { platform:'Local', image:'512×512',   method:'CUDA (RTX 3050)',    P:20, time:1/92.0,    serial:1/275.5,   isGPU:true  },
+    // 4000×4000
+    { platform:'Local', image:'4000×4000', method:'Serial (baseline)', P:1,  time:1/6.4,     serial:1/6.4,     isGPU:false },
+    { platform:'Local', image:'4000×4000', method:'OpenMP 4 threads',  P:4,  time:1/24.2,    serial:1/6.4,     isGPU:false },
+    { platform:'Local', image:'4000×4000', method:'CUDA (RTX 3050)',    P:20, time:1/120.5,   serial:1/6.4,     isGPU:true  },
+    // ── Cloud GCP Colab ────────────────────────────────────────
+    { section: 'Cloud — GCP Colab (Tesla T4, 2 vCPUs) — Real Measured', isHead: true },
+    // 512×512 — exact times from cloud_gpu_results.txt
+    { platform:'GCP',   image:'512×512',   method:'Serial (baseline)',         P:1,  time:0.004167, serial:0.004167, isGPU:false },
+    { platform:'GCP',   image:'512×512',   method:'OpenMP 2 threads',          P:2,  time:0.003730, serial:0.004167, isGPU:false },
+    { platform:'GCP',   image:'512×512',   method:'OpenMP 4t (oversubscribed)',P:4,  time:0.004582, serial:0.004167, isGPU:false },
+    { platform:'GCP',   image:'512×512',   method:'CUDA (Tesla T4) ☁️',        P:40, time:0.122902, serial:0.004167, isGPU:true  },
+    // 4000×4000 — exact times from cloud_gpu_results.txt
+    { platform:'GCP',   image:'4000×4000', method:'Serial (baseline)',         P:1,  time:0.441101, serial:0.441101, isGPU:false },
+    { platform:'GCP',   image:'4000×4000', method:'OpenMP 2 threads',          P:2,  time:0.253491, serial:0.441101, isGPU:false },
+    { platform:'GCP',   image:'4000×4000', method:'OpenMP 4t (oversubscribed)',P:4,  time:0.237183, serial:0.441101, isGPU:false },
+    { platform:'GCP',   image:'4000×4000', method:'CUDA (Tesla T4) ☁️',        P:40, time:0.039423, serial:0.441101, isGPU:true  },
+  ];
+
+  function effBadge(pct) {
+    const cls = pct >= 60 ? 'eff-high' : pct >= 25 ? 'eff-mid' : 'eff-low';
+    return `<span class="badge-eff ${cls}">${pct.toFixed(2)}%</span>`;
+  }
+
+  function speedupHtml(s) {
+    const cls = s >= 1 ? 'fast' : 'slow';
+    return `<span class="speedup-val ${cls}">${s.toFixed(2)}×</span>`;
+  }
+
+  const tbody = document.getElementById('metricsBody');
+  tbody.innerHTML = metricsData.map(row => {
+    if (row.isHead) {
+      return `<tr class="section-head"><td colspan="7">${row.section}</td></tr>`;
+    }
+    const speedup = row.serial / row.time;
+    const effPct  = (speedup / row.P) * 100;
+    const isSerial = row.P === 1;
+    return `<tr>
+      <td>${row.platform}</td>
+      <td>${row.image}</td>
+      <td>${row.method}</td>
+      <td style="text-align:center">${isSerial ? '1 (ref)' : row.P + (row.isGPU ? ' SMs' : ' cores')}</td>
+      <td>${row.time.toFixed(6)}</td>
+      <td>${isSerial ? '<span class="speedup-val">1.00× (ref)</span>' : speedupHtml(speedup)}</td>
+      <td>${isSerial ? '100.00%' : effBadge(effPct)}</td>
+    </tr>`;
+  }).join('');
+
+
   const imageInput  = document.getElementById('imageInput');
   const runBtn      = document.getElementById('runBtn');
   const statusDot   = document.getElementById('statusDot');
