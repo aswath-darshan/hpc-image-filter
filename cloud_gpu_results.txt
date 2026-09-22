@@ -1,0 +1,16 @@
+CLOUD GPU BENCHMARK RESULTS
+Platform: Google Colab (GCP Cloud)
+GPU: Tesla T4, 15360 MiB, 580.82.07
+
+
+--- 512×512 ---
+  serial          time=0.004167s  throughput=240.00 img/s  speedup=1.00x
+  openmp_2t       time=0.003730s  throughput=268.09 img/s  speedup=1.12x
+  openmp_4t       time=0.004582s  throughput=218.23 img/s  speedup=0.91x
+  cuda            time=0.122902s  throughput=8.14 img/s  speedup=0.03x
+
+--- 4000×4000 ---
+  serial          time=0.441101s  throughput=2.27 img/s  speedup=1.00x
+  openmp_2t       time=0.253491s  throughput=3.94 img/s  speedup=1.74x
+  openmp_4t       time=0.237183s  throughput=4.22 img/s  speedup=1.86x
+  cuda            time=0.039423s  throughput=25.37 img/s  speedup=11.19x

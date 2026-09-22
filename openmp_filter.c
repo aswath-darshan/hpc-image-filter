@@ -93,7 +93,9 @@ void sobel_edge_omp(const unsigned char *input, unsigned char *output,
 
 int main(int argc, char *argv[]) {
     if (argc < 4) {
-        fprintf(stderr, "Usage: %s <input_image> <grayscale_out.png> <edges_out.png> [num_threads]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <input_image> <grayscale_out.png> <edges_out.png> [num_threads] [serial_baseline_seconds]\n", argv[0]);
+        fprintf(stderr, "  serial_baseline_seconds: optional. Pass the 'Total time' printed by\n");
+        fprintf(stderr, "  serial_filter on the SAME image to get Speedup/Efficiency computed here.\n");
         return EXIT_FAILURE;
     }
 
@@ -101,6 +103,11 @@ int main(int argc, char *argv[]) {
     const char *gray_out_path = argv[2];
     const char *edges_out_path = argv[3];
     int num_threads = (argc >= 5) ? atoi(argv[4]) : 4;
+    /* Optional 5th arg: the serial baseline's total time, for computing
+       Speedup/Efficiency (Unit 1 performance metrics). If not provided,
+       those lines are simply skipped in the output. */
+    int has_baseline = (argc >= 6);
+    double serial_baseline_time = has_baseline ? atof(argv[5]) : 0.0;
 
     omp_set_num_threads(num_threads);
 
@@ -140,6 +147,25 @@ int main(int argc, char *argv[]) {
     printf("Sobel edge time (s) : %.6f\n", edge_time);
     printf("Total time (s)      : %.6f\n", total_time);
     printf("Throughput (img/s)  : %.4f\n", 1.0 / total_time);
+
+    /* --- Performance metrics (Unit 1: parallel algorithm performance) ---
+       Speedup    S = T_serial / T_parallel
+         "How many times faster is the parallel version than serial?"
+       Efficiency E = S / P   (P = number of threads/processors used)
+         "How well is each additional thread actually being used?"
+         E close to 1.0 (100%) = near-perfect scaling.
+         E well below 1.0 = overhead (thread creation, synchronization,
+         memory contention) is eating into the theoretical speedup. */
+    if (has_baseline && serial_baseline_time > 0.0) {
+        double speedup = serial_baseline_time / total_time;
+        double efficiency_pct = (speedup / num_threads) * 100.0;
+        printf("Speedup             : %.2fx  (vs serial baseline %.6fs)\n", speedup, serial_baseline_time);
+        printf("Efficiency          : %.2f%%  (%d threads)\n", efficiency_pct, num_threads);
+    } else {
+        printf("Speedup             : N/A (pass serial_filter's total time as 5th arg to compute)\n");
+        printf("Efficiency          : N/A\n");
+    }
+
     printf("Saved: %s, %s\n", gray_out_path, edges_out_path);
 
     stbi_image_free(img);

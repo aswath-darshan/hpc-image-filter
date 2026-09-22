@@ -154,6 +154,15 @@ int main(int argc, char *argv[]) {
     printf("Sobel edge time (s) : %.6f\n", edge_time);
     printf("Total time (s)      : %.6f\n", total_time);
     printf("Throughput (img/s)  : %.4f\n", 1.0 / total_time);
+    /* --- Performance metrics (Unit 1: parallel algorithm performance) ---
+       Serial execution is the reference point every parallel version is
+       measured against, so by definition:
+         Speedup    = T_serial / T_serial = 1.00x
+         Efficiency = Speedup / P (P=1 processor)  = 100%
+       Printed here so the output format matches openmp_filter.c exactly,
+       making it easy to line up results side by side in a report. */
+    printf("Speedup             : 1.00x (baseline reference)\n");
+    printf("Efficiency          : 100.00%% (1 core)\n");
     printf("Saved: %s, %s\n", gray_out_path, edges_out_path);
 
     stbi_image_free(img);
