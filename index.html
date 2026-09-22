@@ -4,17 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Image Filter Benchmark — HPC Mini Project</title>
+<meta name="description" content="Performance analysis of image filtering across CPU, GPU, and cloud deployment environments. Serial, OpenMP, CUDA comparison.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --paper: #FAFAF8;
     --ink: #1A1D1F;
     --ink-60: #5A5D5F;
+    --ink-30: #A0A3A6;
     --line: #D8D8D3;
     --cpu: #2A4B8D;
     --gpu: #B5502E;
+    --cloud: #6B21A8;
     --ok: #2F7A4F;
+    --bg-subtle: #F3F3EF;
   }
 
   * { box-sizing: border-box; }
@@ -31,7 +35,7 @@
   .mono { font-family: 'JetBrains Mono', monospace; }
 
   .wrap {
-    max-width: 880px;
+    max-width: 920px;
     margin: 0 auto;
     padding: 48px 24px 96px;
   }
@@ -97,6 +101,8 @@
     font-size: 11px;
     color: var(--ink-60);
     margin: 0 0 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .controls {
@@ -119,6 +125,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
+    transition: all 0.15s ease;
   }
 
   button {
@@ -189,29 +196,37 @@
     margin-top: 12px;
   }
 
+  /* ---- Benchmark chart styles ---- */
   .chart-row {
     display: grid;
-    grid-template-columns: 140px 1fr 90px;
+    grid-template-columns: 180px 1fr 100px;
     align-items: center;
     gap: 14px;
     margin-bottom: 10px;
     font-size: 13px;
   }
 
-  .chart-row .label { color: var(--ink-60); }
+  .chart-row .label {
+    color: var(--ink-60);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
 
   .bar-track {
-    height: 18px;
+    height: 22px;
     background: #EFEFEC;
     position: relative;
+    overflow: hidden;
   }
 
   .bar-fill {
     height: 100%;
+    transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .bar-fill.cpu { background: var(--cpu); }
-  .bar-fill.gpu { background: var(--gpu); }
+  .bar-fill.cpu   { background: var(--cpu); }
+  .bar-fill.gpu   { background: var(--gpu); }
+  .bar-fill.cloud { background: var(--cloud); }
 
   .chart-value {
     font-family: 'JetBrains Mono', monospace;
@@ -219,26 +234,129 @@
     text-align: right;
   }
 
-  .chart-group-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--ink-60);
-    margin: 20px 0 8px;
-  }
-
-  .chart-group-label:first-child { margin-top: 0; }
-
   .legend {
     display: flex;
     gap: 20px;
     font-size: 12px;
     color: var(--ink-60);
     margin-top: 18px;
+    flex-wrap: wrap;
   }
 
   .legend span { display: flex; align-items: center; gap: 6px; }
-
   .legend .swatch { width: 10px; height: 10px; display: inline-block; }
+
+  /* ---- Architecture cards ---- */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .arch-card {
+    border: 1px solid var(--line);
+    padding: 16px;
+    text-align: center;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+
+  .arch-card:hover {
+    border-color: var(--ink);
+    transform: translateY(-2px);
+  }
+
+  .arch-card .unit-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--paper);
+    padding: 2px 8px;
+    display: inline-block;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .arch-card .unit-tag.u1 { background: var(--ink-60); }
+  .arch-card .unit-tag.u2 { background: var(--cpu); }
+  .arch-card .unit-tag.u3 { background: var(--gpu); }
+  .arch-card .unit-tag.u4 { background: var(--cloud); }
+
+  .arch-card h3 {
+    font-size: 14px;
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+
+  .arch-card p {
+    font-size: 12px;
+    color: var(--ink-60);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  /* ---- Findings ---- */
+  .finding {
+    padding: 12px 16px;
+    border-left: 3px solid var(--line);
+    margin-bottom: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    background: var(--bg-subtle);
+  }
+
+  .finding strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .finding.cpu   { border-left-color: var(--cpu); }
+  .finding.gpu   { border-left-color: var(--gpu); }
+  .finding.cloud { border-left-color: var(--cloud); }
+
+  /* ---- Deployment cards ---- */
+  .deploy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .deploy-card {
+    border: 1px solid var(--line);
+    padding: 16px;
+  }
+
+  .deploy-card h4 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .deploy-card .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px solid;
+    display: inline-block;
+  }
+
+  .deploy-card .badge.live   { color: var(--ok);    border-color: var(--ok); }
+  .deploy-card .badge.ready  { color: var(--cloud); border-color: var(--cloud); }
+
+  .deploy-card ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: var(--ink-60);
+    line-height: 1.6;
+  }
 
   footer {
     margin-top: 40px;
@@ -246,6 +364,14 @@
     color: var(--ink-60);
     border-top: 1px solid var(--line);
     padding-top: 20px;
+  }
+
+  @media (max-width: 700px) {
+    .arch-grid    { grid-template-columns: repeat(2, 1fr); }
+    .deploy-grid  { grid-template-columns: 1fr; }
+    .images       { grid-template-columns: 1fr; }
+    .chart-row    { grid-template-columns: 120px 1fr 80px; }
+    header        { flex-direction: column; gap: 8px; }
   }
 </style>
 </head>
@@ -255,7 +381,7 @@
   <header>
     <div>
       <h1>Image Filter Benchmark</h1>
-      <p class="subtitle">Grayscale + Sobel edge detection, deployed as a live service on Render (cloud PaaS).</p>
+      <p class="subtitle">Performance analysis of grayscale + Sobel edge detection across CPU, GPU, and cloud deployment environments.</p>
     </div>
     <div class="status">
       <span class="dot" id="statusDot"></span>
@@ -263,8 +389,36 @@
     </div>
   </header>
 
+  <!-- Architecture Overview -->
   <div class="panel">
-    <p class="panel-label">run a filter on the deployed VM</p>
+    <p class="panel-label">project architecture — 4 execution environments</p>
+    <div class="arch-grid">
+      <div class="arch-card">
+        <span class="unit-tag u1">Unit 1</span>
+        <h3>Serial C</h3>
+        <p>Single-core baseline. gcc -O2, sequential pixel processing.</p>
+      </div>
+      <div class="arch-card">
+        <span class="unit-tag u2">Unit 2</span>
+        <h3>OpenMP</h3>
+        <p>Shared-memory parallelism. #pragma omp parallel for, multi-core CPU.</p>
+      </div>
+      <div class="arch-card">
+        <span class="unit-tag u3">Unit 3</span>
+        <h3>CUDA</h3>
+        <p>GPU execution. One thread per pixel, 16×16 thread blocks.</p>
+      </div>
+      <div class="arch-card">
+        <span class="unit-tag u4">Unit 4</span>
+        <h3>Cloud Deploy</h3>
+        <p>Azure/Render VM (CPU) + GCP Colab (GPU). Real cloud benchmarking.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Demo -->
+  <div class="panel">
+    <p class="panel-label">live demo — run filter on deployed cloud VM</p>
     <div class="controls">
       <input type="file" id="imageInput" accept="image/*">
       <select id="methodSelect">
@@ -293,39 +447,135 @@
     <div class="error" id="errorLine" style="display:none"></div>
   </div>
 
+  <!-- Benchmarks: Local Machine -->
   <div class="panel">
-    <p class="panel-label">recorded benchmarks — 512×512 image</p>
-    <div id="chartSmall"></div>
+    <p class="panel-label">local machine benchmarks — laptop (i5 / RTX 3050)</p>
 
-    <p class="panel-label" style="margin-top:28px">recorded benchmarks — 4000×4000 image</p>
-    <div id="chartLarge"></div>
+    <p class="panel-label" style="margin-top:0;font-size:10px;color:var(--ink-30)">512×512 image — throughput (img/s), higher is better</p>
+    <div id="chartLocalSmall"></div>
+
+    <p class="panel-label" style="margin-top:24px;font-size:10px;color:var(--ink-30)">4000×4000 image — throughput (img/s), higher is better</p>
+    <div id="chartLocalLarge"></div>
 
     <div class="legend">
-      <span><span class="swatch" style="background:var(--cpu)"></span>CPU (this laptop)</span>
-      <span><span class="swatch" style="background:var(--gpu)"></span>GPU (RTX 3050 / Colab T4)</span>
+      <span><span class="swatch" style="background:var(--cpu)"></span>CPU (Serial / OpenMP)</span>
+      <span><span class="swatch" style="background:var(--gpu)"></span>GPU (NVIDIA RTX 3050)</span>
+    </div>
+  </div>
+
+  <!-- Benchmarks: Cloud GCP Colab -->
+  <div class="panel">
+    <p class="panel-label">cloud benchmarks — google colab (GCP, NVIDIA Tesla T4) — real measured results</p>
+
+    <p class="panel-label" style="margin-top:0;font-size:10px;color:var(--ink-30)">512×512 image — throughput (img/s), higher is better</p>
+    <div id="chartCloudSmall"></div>
+
+    <p class="panel-label" style="margin-top:24px;font-size:10px;color:var(--ink-30)">4000×4000 image — throughput (img/s), higher is better</p>
+    <div id="chartCloudLarge"></div>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--cpu)"></span>Cloud CPU (Colab VM, 2 vCPUs)</span>
+      <span><span class="swatch" style="background:var(--cloud)"></span>Cloud GPU (NVIDIA Tesla T4 on GCP)</span>
+    </div>
+  </div>
+
+  <!-- Key Findings -->
+  <div class="panel">
+    <p class="panel-label">key findings</p>
+
+    <div class="finding gpu">
+      <strong>GPU Speedup Depends on Image Size (Measured on GCP Tesla T4)</strong>
+      On small images (512×512), the T4 GPU is <em>30× slower</em> than serial CPU (0.123s vs 0.004s) —
+      kernel launch and H2D/D2H memory transfer overhead dominates when there are few pixels to compute.
+      On large images (4000×4000), the GPU delivers an <em>11.19× speedup</em> (0.039s vs 0.441s)
+      once that fixed overhead is amortized across 16 million pixels.
+    </div>
+
+    <div class="finding cpu">
+      <strong>OpenMP Oversubscription on Cloud VMs (Confirmed on Colab)</strong>
+      Colab VMs have 2 real vCPUs. With 2 OpenMP threads: 1.12× speedup over serial.
+      With 4 threads on 2 vCPUs: <em>0.91× — slower than serial</em> on small images.
+      On large images, 4 threads slightly edged out 2 threads (4.22 vs 3.94 img/s) because
+      compute time outweighed scheduling overhead — but efficiency remained low.
+      This directly proves parallel performance depends on real available hardware.
+    </div>
+
+    <div class="finding cloud">
+      <strong>Cloud GPU (GCP Tesla T4) — Real Measured Results</strong>
+      Platform: Google Colab (GCP), GPU: Tesla T4 15 GB, Driver 580.82.<br>
+      Large image speedup: <em>11.19×</em> vs serial CPU on the same cloud VM.
+      Cloud GPU access removes the need to own dedicated hardware — a core cloud computing benefit.
+      The GPU Dockerfile is ready to deploy this as a live cloud GPU web service.
+    </div>
+  </div>
+
+  <!-- Deployment Info -->
+  <div class="panel">
+    <p class="panel-label">cloud deployment architecture</p>
+    <div class="deploy-grid">
+      <div class="deploy-card">
+        <h4>
+          Render / Azure CPU VM
+          <span class="badge live">LIVE</span>
+        </h4>
+        <ul>
+          <li>Flask + Gunicorn web service</li>
+          <li>Serial &amp; OpenMP binaries compiled in Docker</li>
+          <li>Demonstrates PaaS cloud deployment (Unit 4)</li>
+          <li>Shows constrained CPU allocation effects</li>
+        </ul>
+      </div>
+      <div class="deploy-card">
+        <h4>
+          GCP Cloud GPU (Colab)
+          <span class="badge ready">BENCHMARKED</span>
+        </h4>
+        <ul>
+          <li>NVIDIA Tesla T4 GPU via Google Colab (GCP)</li>
+          <li>CUDA filter compiled &amp; benchmarked on cloud GPU</li>
+          <li>11.19× speedup on 4000×4000 image vs serial</li>
+          <li>GPU Dockerfile ready for dedicated VM deployment</li>
+        </ul>
+      </div>
     </div>
   </div>
 
   <footer>
-    High Performance and Cloud Computing (23AID304) — Serial / OpenMP / CUDA performance comparison, deployed on Render.
+    High Performance and Cloud Computing (23AID304) — Serial / OpenMP / CUDA performance comparison.<br>
+    Deployed on Render/Azure (CPU web service) and Google Cloud Platform — GCP (GPU benchmarking via Colab, Tesla T4).
   </footer>
 
 </div>
 
 <script>
-  // ---- Recorded benchmark data (from local + Colab testing) ----
-  const benchmarks = {
+  // ---- Local machine benchmark data (from laptop testing) ----
+  const localBenchmarks = {
     small: [
-      { label: 'Serial',        throughput: 275.5,  type: 'cpu' },
-      { label: 'OpenMP (4t)',   throughput: 528.9,  type: 'cpu' },
-      { label: 'RTX 3050',      throughput: 92.0,   type: 'gpu' },
-      { label: 'Colab T4',      throughput: 1165.0, type: 'gpu' },
+      { label: 'Serial (1 core)',    throughput: 275.5,  type: 'cpu' },
+      { label: 'OpenMP (4 threads)', throughput: 528.9,  type: 'cpu' },
+      { label: 'RTX 3050 (CUDA)',    throughput: 92.0,   type: 'gpu' },
     ],
     large: [
-      { label: 'Serial',        throughput: 6.4,    type: 'cpu' },
-      { label: 'OpenMP (4t)',   throughput: 24.2,   type: 'cpu' },
-      { label: 'RTX 3050',      throughput: 120.5,  type: 'gpu' },
-      { label: 'Colab T4',      throughput: 30.4,   type: 'gpu' },
+      { label: 'Serial (1 core)',    throughput: 6.4,    type: 'cpu' },
+      { label: 'OpenMP (4 threads)', throughput: 24.2,   type: 'cpu' },
+      { label: 'RTX 3050 (CUDA)',    throughput: 120.5,  type: 'gpu' },
+    ]
+  };
+
+  // ---- Cloud (GCP Colab) benchmark data — REAL measured results ----
+  // Platform: Google Colab (GCP), GPU: Tesla T4 15360 MiB, Driver 580.82.07
+  const cloudBenchmarks = {
+    small: [
+      { label: 'Serial (1 core)',       throughput: 240.00, type: 'cpu' },
+      { label: 'OpenMP (2 threads)',    throughput: 268.09, type: 'cpu' },
+      { label: 'OpenMP (4t, oversub)', throughput: 218.23, type: 'cpu' },
+      { label: 'T4 GPU (CUDA) ☁️',     throughput: 8.14,   type: 'cloud' },
+    ],
+    large: [
+      { label: 'Serial (1 core)',       throughput: 2.27,   type: 'cpu' },
+      { label: 'OpenMP (2 threads)',    throughput: 3.94,   type: 'cpu' },
+      { label: 'OpenMP (4t, oversub)', throughput: 4.22,   type: 'cpu' },
+      { label: 'T4 GPU (CUDA) ☁️',     throughput: 25.37,  type: 'cloud' },
     ]
   };
 
@@ -343,18 +593,18 @@
     `).join('');
   }
 
-  renderChart('chartSmall', benchmarks.small);
-  renderChart('chartLarge', benchmarks.large);
+  renderChart('chartLocalSmall', localBenchmarks.small);
+  renderChart('chartLocalLarge', localBenchmarks.large);
+  renderChart('chartCloudSmall', cloudBenchmarks.small);
+  renderChart('chartCloudLarge', cloudBenchmarks.large);
 
   // ---- Live demo wiring ----
-  const imageInput = document.getElementById('imageInput');
-  const runBtn = document.getElementById('runBtn');
-  const inputSlot = document.getElementById('inputSlot');
-  const outputSlot = document.getElementById('outputSlot');
-  const statusDot = document.getElementById('statusDot');
-  const statusText = document.getElementById('statusText');
-  const resultLine = document.getElementById('resultLine');
-  const errorLine = document.getElementById('errorLine');
+  const imageInput  = document.getElementById('imageInput');
+  const runBtn      = document.getElementById('runBtn');
+  const statusDot   = document.getElementById('statusDot');
+  const statusText  = document.getElementById('statusText');
+  const resultLine  = document.getElementById('resultLine');
+  const errorLine   = document.getElementById('errorLine');
 
   let selectedFile = null;
 
@@ -364,7 +614,8 @@
     errorLine.style.display = 'none';
     if (selectedFile) {
       const url = URL.createObjectURL(selectedFile);
-      inputSlot.outerHTML = `<img src="${url}" alt="input preview">`;
+      document.getElementById('inputSlot').outerHTML =
+        `<img src="${url}" alt="input preview">`;
     }
   });
 
@@ -390,19 +641,22 @@
       }
 
       const serverTime = response.headers.get('X-Processing-Time-Seconds');
-      const method = response.headers.get('X-Method') || document.getElementById('methodSelect').value;
+      const method = response.headers.get('X-Method') ||
+                     document.getElementById('methodSelect').value;
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
 
-      const outEl = document.getElementById('outputSlot');
-      outEl.outerHTML = `<img id="outputSlot" src="${url}" alt="filtered output">`;
+      document.getElementById('outputSlot').outerHTML =
+        `<img id="outputSlot" src="${url}" alt="filtered output">`;
 
       document.getElementById('resMethod').textContent = method;
-      document.getElementById('resTime').textContent = `${parseFloat(serverTime).toFixed(6)} s`;
-      document.getElementById('resThroughput').textContent = `${(1 / parseFloat(serverTime)).toFixed(2)} img/s`;
+      document.getElementById('resTime').textContent =
+        `${parseFloat(serverTime).toFixed(6)} s`;
+      document.getElementById('resThroughput').textContent =
+        `${(1 / parseFloat(serverTime)).toFixed(2)} img/s`;
       resultLine.style.display = 'flex';
-
       statusText.textContent = 'done';
+
     } catch (err) {
       errorLine.textContent = `Request failed: ${err.message}`;
       errorLine.style.display = 'block';
