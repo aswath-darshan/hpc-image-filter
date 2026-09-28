@@ -154,8 +154,8 @@ def run_filter(binary, input_img, gray_out, edges_out, extra_args=None):
     output = result.stdout
     print(output)
 
-    # Parse "Total time (s)" from output
-    match = re.search(r"Total time.*?:\s*([\d.]+)", output)
+    # Parse "Total time (s)" or "Total Pipelined Time" from output
+    match = re.search(r"Total (?:Pipelined )?time.*?:\s*([\d.]+)", output, re.IGNORECASE)
     total_time = float(match.group(1)) if match else wall_time
 
     # Parse throughput

@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
     printf("CUDA Streams        : %d concurrent streams\n", num_streams);
     printf("Memory Model        : Pinned Host (Page-Locked) + Asynchronous DMA\n");
     printf("Chunk size          : ~%d x %d pixels/stream (with 1-px halo)\n", width, chunk_nominal);
-    printf("Total Pipelined Time: %.6f s (Overlapped H2D + Compute + D2H)\n", elapsed_s);
+    printf("Total time (s)      : %.6f  (pipelined streams, includes H2D/D2H)\n", elapsed_s);
     printf("Throughput          : %.4f img/s\n", 1.0 / elapsed_s);
 
     if (has_baseline && serial_baseline_time > 0.0) {
