@@ -10,6 +10,7 @@ You need these files from the project folder:
 - `serial_filter.c`
 - `openmp_filter.c`
 - `cuda_filter.cu`
+- `cuda_filter_streams.cu`
 - `stb_image.h`
 - `stb_image_write.h`
 - `test_input.png` (512×512 test image)
@@ -54,15 +55,15 @@ In a new cell, paste and run:
 ```
 
 This will:
-1. ✅ Verify GPU availability
-2. ✅ Compile serial, OpenMP, and CUDA versions
+1. ✅ Verify GPU availability (NVIDIA T4 on GCP)
+2. ✅ Compile serial, OpenMP, CUDA standard, and **CUDA Streams (pipelined)**
 3. ✅ Run benchmarks on both small and large images
-4. ✅ Print a formatted comparison table
+4. ✅ Print a formatted comparison table including stream speedup
 5. ✅ Save results to `cloud_gpu_results.txt`
 
 ### Step 5: Capture Results
 
-1. **Screenshot the output** — this shows your CUDA code running on a GCP cloud GPU
+1. **Screenshot the output** — this shows your CUDA and CUDA Streams code running on a cloud GPU
 2. Download result files:
 
 ```python
@@ -70,6 +71,7 @@ from google.colab import files
 files.download('cloud_gpu_results.txt')
 files.download('edges_c_small.png')
 files.download('edges_c_large.png')
+files.download('edges_cs_large.png')
 ```
 
 ---
@@ -94,7 +96,8 @@ uploaded = files.upload()
 !gcc -O2 -o serial_filter serial_filter.c -lm
 !gcc -O2 -fopenmp -o openmp_filter openmp_filter.c -lm
 !nvcc -O2 -o cuda_filter cuda_filter.cu
-!echo "All compiled successfully"
+!nvcc -O2 -o cuda_filter_streams cuda_filter_streams.cu
+!echo "All 4 implementations compiled successfully!"
 ```
 
 ### Cell 4: Run Serial baseline (512×512)
@@ -104,38 +107,47 @@ uploaded = files.upload()
 
 ### Cell 5: Run OpenMP (512×512)
 ```python
-# Replace 0.003838 with the Total time from Cell 4
-!./openmp_filter test_input.png gray_o.png edges_o.png 2 0.003838
+# Pass the Total time printed by Cell 4 as the last argument:
+!./openmp_filter test_input.png gray_o.png edges_o.png 2 0.0038
 ```
 
-### Cell 6: Run CUDA on GPU (512×512)
+### Cell 6: Run CUDA Standard (512×512)
 ```python
-# Replace 0.003838 with the Total time from Cell 4
-!./cuda_filter test_input.png gray_c.png edges_c.png 0.003838
+!./cuda_filter test_input.png gray_c.png edges_c.png 0.0038
 ```
 
-### Cell 7: Run Serial baseline (4000×4000)
+### Cell 7: Run CUDA Streams Pipelined (512×512)
+```python
+# Syntax: ./cuda_filter_streams <input> <gray> <edges> <num_streams> <serial_baseline_s>
+!./cuda_filter_streams test_input.png gray_cs.png edges_cs.png 4 0.0038
+```
+
+### Cell 8: Run Serial baseline (4000×4000)
 ```python
 !./serial_filter test_input_large.png gray_s_large.png edges_s_large.png
 ```
 
-### Cell 8: Run OpenMP (4000×4000)
+### Cell 9: Run OpenMP (4000×4000)
 ```python
-# Replace 0.194512 with the Total time from Cell 7
-!./openmp_filter test_input_large.png gray_o_large.png edges_o_large.png 2 0.194512
+# Pass the Total time printed by Cell 8 as the last argument:
+!./openmp_filter test_input_large.png gray_o_large.png edges_o_large.png 2 0.1945
 ```
 
-### Cell 9: Run CUDA on GPU (4000×4000)
+### Cell 10: Run CUDA Standard (4000×4000)
 ```python
-# Replace 0.194512 with the Total time from Cell 7
-!./cuda_filter test_input_large.png gray_c_large.png edges_c_large.png 0.194512
+!./cuda_filter test_input_large.png gray_c_large.png edges_c_large.png 0.1945
+```
+
+### Cell 11: Run CUDA Streams Pipelined (4000×4000)
+```python
+!./cuda_filter_streams test_input_large.png gray_cs_large.png edges_cs_large.png 4 0.1945
 ```
 
 ---
 
-## What to Tell Your Mentor
+## What to Tell Your Mentor / Professor
 
-> "We deployed our CUDA image filter on Google Colab, which provides NVIDIA T4 GPUs running on Google Cloud Platform (GCP) infrastructure. This allowed us to benchmark GPU performance in a real cloud environment and compare it against serial and OpenMP execution on the same cloud VM's CPU. We also have a GPU-ready Dockerfile (`Dockerfile.gpu`) for deployment on any cloud GPU instance (AWS/GCP/Azure) when dedicated GPU VM quota is available."
+> "To address asynchronous execution and latency hiding in heterogeneous architectures, we implemented **CUDA Streams with Pinned Host Memory (`cudaMallocHost`) and Halo Exchange Domain Decomposition**. This overlaps Host-to-Device PCIe transfers, kernel execution on Streaming Multiprocessors, and Device-to-Host transfers across concurrent streams, hiding PCIe transfer bottleneck."
 
 ---
 

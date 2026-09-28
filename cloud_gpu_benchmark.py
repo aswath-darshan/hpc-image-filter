@@ -74,7 +74,7 @@ print("CELL 2: Uploading source files")
 print("=" * 60)
 
 # Check if files already exist (e.g., cloned from git)
-needed_files = ["serial_filter.c", "openmp_filter.c", "cuda_filter.cu",
+needed_files = ["serial_filter.c", "openmp_filter.c", "cuda_filter.cu", "cuda_filter_streams.cu",
                 "stb_image.h", "stb_image_write.h"]
 
 missing = [f for f in needed_files if not os.path.exists(f)]
@@ -108,16 +108,17 @@ else:
 
 
 # =============================================================================
-# CELL 3: Compile all three versions
+# CELL 3: Compile all filter implementations
 # =============================================================================
 print("\n" + "=" * 60)
 print("CELL 3: Compiling all filter implementations")
 print("=" * 60)
 
 compile_commands = {
-    "Serial":  "gcc -O2 -o serial_filter serial_filter.c -lm",
-    "OpenMP":  "gcc -O2 -fopenmp -o openmp_filter openmp_filter.c -lm",
-    "CUDA":    "nvcc -O2 -o cuda_filter cuda_filter.cu",
+    "Serial":        "gcc -O2 -o serial_filter serial_filter.c -lm",
+    "OpenMP":        "gcc -O2 -fopenmp -o openmp_filter openmp_filter.c -lm",
+    "CUDA Standard": "nvcc -O2 -o cuda_filter cuda_filter.cu",
+    "CUDA Streams":  "nvcc -O2 -o cuda_filter_streams cuda_filter_streams.cu",
 }
 
 for name, cmd in compile_commands.items():
@@ -210,13 +211,21 @@ for size_name, img_info in images.items():
     if r:
         results[size_name]["openmp_4t"] = r
 
-    # --- CUDA (GPU) ---
-    print(f"\n▶ CUDA (T4 GPU on GCP cloud):")
+    # --- CUDA Standard (GPU) ---
+    print(f"\n▶ CUDA Standard (T4 GPU on GCP cloud):")
     r = run_filter("cuda_filter", img_info["file"],
                    f"gray_c_{size_name}.png", f"edges_c_{size_name}.png",
                    [f"{serial_time:.6f}"])
     if r:
         results[size_name]["cuda"] = r
+
+    # --- CUDA Streams (Pipelined GPU) ---
+    print(f"\n▶ CUDA Streams Pipelined (4 concurrent streams on T4 GPU):")
+    r = run_filter("cuda_filter_streams", img_info["file"],
+                   f"gray_cs_{size_name}.png", f"edges_cs_{size_name}.png",
+                   ["4", f"{serial_time:.6f}"])
+    if r:
+        results[size_name]["cuda_streams"] = r
 
 
 # =============================================================================
@@ -245,9 +254,9 @@ if cpu_info.returncode == 0:
         if 'CPU(s):' in line and 'NUMA' not in line and 'On-line' not in line:
             print(f"vCPUs        : {line.split(':')[1].strip()}")
 
-print(f"\n{'─' * 70}")
-print(f"{'Image':<12} {'Method':<22} {'Time (s)':<14} {'Throughput':<14} {'Speedup':<10}")
-print(f"{'─' * 70}")
+print(f"\n{'─' * 75}")
+print(f"{'Image':<12} {'Method':<25} {'Time (s)':<14} {'Throughput':<14} {'Speedup':<10}")
+print(f"{'─' * 75}")
 
 for size_name, size_results in results.items():
     desc = images[size_name]["desc"]
@@ -258,13 +267,14 @@ for size_name, size_results in results.items():
             "serial": "Serial (1 core)",
             "openmp_2t": "OpenMP (2 threads)",
             "openmp_4t": "OpenMP (4 threads)*",
-            "cuda": "CUDA (T4 GPU) ☁️",
+            "cuda": "CUDA Standard ☁️",
+            "cuda_streams": "CUDA Streams (4s) ⚡",
         }.get(method_name, method_name)
 
         speedup = serial_time / r["total_time"] if r["total_time"] > 0 else 0
-        print(f"{desc:<12} {label:<22} {r['total_time']:<14.6f} {r['throughput']:<14.2f} {speedup:<10.2f}x")
+        print(f"{desc:<12} {label:<25} {r['total_time']:<14.6f} {r['throughput']:<14.2f} {speedup:<10.2f}x")
 
-    print(f"{'─' * 70}")
+    print(f"{'─' * 75}")
 
 print(f"\n* OpenMP with 4 threads on 2 vCPUs = oversubscribed (expected slower)")
 print(f"☁️ = Running on Google Cloud Platform (GCP) GPU infrastructure")
@@ -333,5 +343,7 @@ print("  from google.colab import files")
 print("  files.download('cloud_gpu_results.txt')")
 print("  files.download('edges_c_small.png')")
 print("  files.download('edges_c_large.png')")
+print("  files.download('edges_cs_small.png')")
+print("  files.download('edges_cs_large.png')")
 print("\n✅ CLOUD GPU BENCHMARKING COMPLETE!")
 print("Take screenshots of this output for your project submission.")

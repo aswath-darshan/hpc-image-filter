@@ -36,9 +36,10 @@ WORK_DIR = "/tmp/filter_service"
 os.makedirs(WORK_DIR, exist_ok=True)
 
 BINARIES = {
-    "serial": os.path.join(BASE_DIR, "serial_filter"),
-    "openmp": os.path.join(BASE_DIR, "openmp_filter"),
-    "cuda":   os.path.join(BASE_DIR, "cuda_filter"),
+    "serial":       os.path.join(BASE_DIR, "serial_filter"),
+    "openmp":       os.path.join(BASE_DIR, "openmp_filter"),
+    "cuda":         os.path.join(BASE_DIR, "cuda_filter"),
+    "cuda_streams": os.path.join(BASE_DIR, "cuda_filter_streams"),
 }
 
 
@@ -87,11 +88,11 @@ def process_image():
 
     method = request.form.get("method", "serial")
     if method not in BINARIES:
-        return jsonify({"error": f"Unknown method '{method}', expected 'serial', 'openmp', or 'cuda'"}), 400
+        return jsonify({"error": f"Unknown method '{method}', expected 'serial', 'openmp', 'cuda', or 'cuda_streams'"}), 400
 
-    # Check GPU availability for CUDA method
-    if method == "cuda" and check_gpu() is None:
-        return jsonify({"error": "CUDA method requested but no GPU available on this server"}), 503
+    # Check GPU availability for CUDA methods
+    if method in ("cuda", "cuda_streams") and check_gpu() is None:
+        return jsonify({"error": f"{method} requested but no GPU available on this server"}), 503
 
     binary_path = BINARIES[method]
     if not os.path.isfile(binary_path):
@@ -108,7 +109,8 @@ def process_image():
     cmd = [binary_path, input_path, gray_path, edges_path]
     if method == "openmp":
         cmd.append("4")  # thread count
-    # CUDA binary takes only 3 args (input, gray_out, edges_out)
+    elif method == "cuda_streams":
+        cmd.append("4")  # 4 concurrent streams
 
     start = time.time()
     try:
