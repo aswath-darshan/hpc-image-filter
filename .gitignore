@@ -8,3 +8,22 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
+
+# Compiled executables & object files
+serial_filter
+serial_filter.exe
+openmp_filter
+openmp_filter.exe
+cuda_filter
+cuda_filter.exe
+cuda_filter_streams
+cuda_filter_streams.exe
+*.o
+*.obj
+
+# Generated test output images (keep test_input*.png)
+gray_*.png
+edges_*.png
+g_*.png
+e_*.png
